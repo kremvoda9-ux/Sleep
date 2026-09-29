@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мой Сон</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 90%; max-width: 400px; text-align: center; }
+        h2 { color: #333; margin-top: 0; }
+        button { width: 100%; padding: 15px; margin: 10px 0; border: none; border-radius: 10px; font-size: 16px; cursor: pointer; transition: 0.2s; }
+        .btn-sleep { background-color: #4CAF50; color: white; } 
+        .btn-wake { background-color: #FF9800; color: white; }   
+        .btn-dream-yes { background-color: #2196F3; color: white; } 
+        .btn-dream-no { background-color: #757575; color: white; }  
+        .status { margin-top: 20px; font-weight: bold; color: #555; min-height: 50px; }
+        .history { margin-top: 20px; text-align: left; font-size: 14px; max-height: 150px; overflow-y: auto; border-top: 1px solid #eee; padding-top: 10px; }
+        .log-item { padding: 5px 0; border-bottom: 1px dashed #ddd; display: flex; justify-content: space-between; align-items: center; }
+        .delete-btn { background: none; border: none; color: red; font-size: 18px; cursor: pointer; padding: 0 5px; width: auto; margin: 0; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2 id="title">Трекер Сна</h2>
+    
+    <!-- Кнопки управления -->
+    <div id="controls"></div>
+
+    <!-- Статус текущей сессии -->
+    <div class="status" id="statusText">Нажмите "Лечь спать", чтобы начать.</div>
+
+    <!-- История записей -->
+    <div class="history" id="historyList"></div>
+</div>
+
+<script>
+    const controlsDiv = document.getElementById('controls');
+    const statusText = document.getElementById('statusText');
+    const historyList = document.getElementById('historyList');
+    const title = document.getElementById('title');
+
+    // Загружаем историю из постоянного хранилища
+    let logs = JSON.parse(localStorage.getItem('mySleepLogs')) || [];
+    
+    // ГЛАВНОЕ ИСПРАВЛЕНИЕ: Восстанавливаем время старта сна при каждом открытии страницы
+    let savedStartTimestamp = localStorage.getItem('currentSleepStart');
+    let sleepStartTime = savedStartTimestamp ? new Date(parseInt(savedStartTimestamp)) : null;
+
+    function init() {
+        render();
+        updateHistory();
+    }
+
+    function saveLog(entry) {
+        logs.unshift(entry); 
+        if(logs.length > 50) logs.pop(); 
+        localStorage.setItem('mySleepLogs', JSON.stringify(logs));
+        
+        // Удаляем временную метку старта, так как сон завершен
+        localStorage.removeItem('currentSleepStart'); 
+        sleepStartTime = null;
+        
+        updateHistory();
+    }
+
+    function deleteLog(index) {
+        if(confirm("Удалить эту запись?")) {
+            logs.splice(index, 1);
+            localStorage.setItem('mySleepLogs', JSON.stringify(logs));
+            updateHistory();
+        }
+    }
+
+    function updateHistory() {
+        historyList.innerHTML = '<strong>История:</strong><br>';
+        if (logs.length === 0) {
+            historyList.innerHTML += 'Пока пусто.';
+            return;
+        }
+        
+        logs.forEach((log, index) => {
+            const dreamIcon = log.dream ? '🌙' : '😶';
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'log-item';
+            
+            const textSpan = document.createElement('span');
+            textSpan.innerText = `${dreamIcon} ${log.date}: Лёг в ${log.sleepTime}, Встал в ${log.wakeTime}`;
+            
+            const delBtn = document.createElement('button');
+            delBtn.className = 'delete-btn';
+            delBtn.innerText = '❌';
+            delBtn.onclick = () => deleteLog(index); 
+            
+            itemDiv.appendChild(textSpan);
+            itemDiv.appendChild(delBtn);
+            historyList.appendChild(itemDiv);
+        });
+    }
+
+    function formatTime(date) {
+        return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    }
+
+    function formatDate(date) {
+        return date.toLocaleDateString([], {day: 'numeric', month: 'short'});
+    }
+
+    function render() {
+        controlsDiv.innerHTML = '';
+        
+        if (!sleepStartTime) {
+            title.innerText = "Готов ко сну?";
+            statusText.innerText = "Нажмите кнопку ниже, когда ляжете.";
+            
+            const btnSleep = document.createElement('button');
+            btnSleep.className = 'btn-sleep';
+            btnSleep.innerText = '😴 Лечь спать';
+            btnSleep.onclick = () => {
+                const now = new Date();
+                sleepStartTime = now;
+                
+                // СОХРАНЯЕМ время старта в память телефона (localStorage)
+                localStorage.setItem('currentSleepStart', now.getTime().toString());
+                
+                render(); 
+            };
+            controlsDiv.appendChild(btnSleep);
+
+        } else {
+            title.innerText = "Вы спите...";
+            statusText.innerText = `Время засыпания: ${formatTime(sleepStartTime)}. Нажмите, когда проснетесь.`;
+            
+            const btnWake = document.createElement('button');
+            btnWake.className = 'btn-wake';
+            btnWake.innerText = '☀️ Я проснулся!';
+            btnWake.onclick = askDreamQuestion;
+            controlsDiv.appendChild(btnWake);
+        }
+    }
+
+    function askDreamQuestion() {
+        controlsDiv.innerHTML = '';
+        statusText.innerText = "Важный вопрос:";
+        title.innerText = "Снились ли сны?";
+
+        const btnYes = document.createElement('button');
+        btnYes.className = 'btn-dream-yes';
+        btnYes.innerText = 'Да, видел сны 🌙';
+        btnYes.onclick = () => finishSession(true);
+        
+        const btnNo = document.createElement('button');
+        btnNo.className = 'btn-dream-no';
+        btnNo.innerText = 'Нет, без снов 😶';
+        btnNo.onclick = () => finishSession(false);
+
+        controlsDiv.appendChild(btnYes);
+        controlsDiv.appendChild(btnNo);
+    }
+
+    function finishSession(hadDream) {
+        const wakeTime = new Date();
+        const entry = {
+            date: formatDate(wakeTime),
+            sleepTime: formatTime(sleepStartTime),
+            wakeTime: formatTime(wakeTime),
+            dream: hadDream
+        };
+        
+        saveLog(entry);
+        render();
+        alert("Запись сохранена!");
+    }
+
+    init();
+</script>
+
+</body>
+</html>
