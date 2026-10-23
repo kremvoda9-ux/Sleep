@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Мой Сон | Аналитика v3</title>
+    <title>Мой Сон | Аналитика v4 (Final Fix)</title>
     <style>
         body { font-family: sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 10px; }
         .container { width: 100%; max-width: 450px; }
@@ -86,53 +86,64 @@
 
     let currentPeriod = 'all'; 
 
-    // --- ЗАЩИТА ОТ NaN И ПЕРЕНОС ДАННЫХ ---
-    function getSafeLogs() {
-        // Пробуем взять новые данные (_v2)
-        let data = JSON.parse(localStorage.getItem('mySleepLogs_v2')) || [];
+    // --- ФУНКЦИЯ ПОЛУЧЕНИЯ ДАННЫХ С АВТОРАСЧЕТОМ ---
+    function getProcessedLogs() {
+        // Берем сырые данные
+        let rawLogs = JSON.parse(localStorage.getItem('mySleepLogs_v2')) || [];
         
-        // Если новых нет, берем старые ('mySleepLogs') и мигрируем их
-        if (data.length === 0) {
-            let oldData = JSON.parse(localStorage.getItem('mySleepLogs')) || [];
-            if (oldData.length > 0) {
-                console.log("Миграция старых данных...");
-                data = oldData.map(log => {
-                    // Восстанавливаем timestamp
-                    let ts = Date.now();
-                    try {
-                        const parts = log.date.split(' '); 
-                        if (parts.length >= 2) {
-                            const day = parseInt(parts[0]);
-                            const monthNames = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
-                            const monthIndex = monthNames.findIndex(m => m.toLowerCase() === parts[1].toLowerCase());
-                            if (monthIndex !== -1) {
-                                ts = new Date(new Date().getFullYear(), monthIndex, day, 12).getTime();
-                            }
-                        }
-                    } catch(e) {}
-
-                    // Восстанавливаем duration
-                    let dur = 0;
-                    try {
-                        const [sh, sm] = log.sleepTime.split(':').map(Number);
-                        const [wh, wm] = log.wakeTime.split(':').map(Number);
-                        let startMins = sh * 60 + sm;
-                        let endMins = wh * 60 + wm;
-                        if (endMins <= startMins) endMins += 24 * 60;
-                        dur = endMins - startMins;
-                    } catch(e) {}
-
-                    return { ...log, timestamp: ts, duration: dur };
-                });
-                localStorage.setItem('mySleepLogs_v2', JSON.stringify(data));
-            }
+        // Если пусто, пробуем старые
+        if (rawLogs.length === 0) {
+             rawLogs = JSON.parse(localStorage.getItem('mySleepLogs')) || [];
         }
-        
-        // ФИЛЬТР БЕЗОПАСНОСТИ: Оставляем только те записи, где duration — это ЧИСЛО больше 0
-        return data.filter(item => typeof item.duration === 'number' && !isNaN(item.duration) && item.duration > 0);
+
+        // Обрабатываем каждую запись
+        return rawLogs.map(log => {
+            let processedLog = { ...log };
+
+            // 1. Гарантируем наличие timestamp
+            if (!processedLog.timestamp) {
+                try {
+                    const parts = log.date.split(' '); 
+                    if (parts.length >= 2) {
+                        const day = parseInt(parts[0]);
+                        const monthNames = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+                        const monthIndex = monthNames.findIndex(m => m.toLowerCase() === parts[1].toLowerCase());
+                        if (monthIndex !== -1) {
+                            processedLog.timestamp = new Date(new Date().getFullYear(), monthIndex, day, 12).getTime();
+                        } else {
+                            processedLog.timestamp = Date.now();
+                        }
+                    } else {
+                         processedLog.timestamp = Date.now();
+                    }
+                } catch(e) { processedLog.timestamp = Date.now(); }
+            }
+
+            // 2. ГАВНЫЙ МОМЕНТ: Если duration нет или оно 0/NaN, считаем его сами из строк времени!
+            if (!processedLog.duration || isNaN(processedLog.duration) || processedLog.duration <= 0) {
+                try {
+                    const [sh, sm] = log.sleepTime.split(':').map(Number);
+                    const [wh, wm] = log.wakeTime.split(':').map(Number);
+                    
+                    let startMins = sh * 60 + sm;
+                    let endMins = wh * 60 + wm;
+                    
+                    // Переход через полночь
+                    if (endMins <= startMins) {
+                        endMins += 24 * 60;
+                    }
+                    
+                    processedLog.duration = endMins - startMins;
+                } catch(e) {
+                    processedLog.duration = 0; // Если совсем беда, ставим 0
+                }
+            }
+
+            return processedLog;
+        }).filter(log => log.duration > 0); // В конце отсекаем те, что реально не спали (0 мин)
     }
 
-    let logs = getSafeLogs();
+    let logs = getProcessedLogs();
     
     let savedStartTimestamp = localStorage.getItem('currentSleepStart_v2');
     let sleepStartTime = savedStartTimestamp ? new Date(parseInt(savedStartTimestamp)) : null;
@@ -151,11 +162,11 @@
     };
 
     function calculateAndShowStats() {
-        // Получаем уже очищенные безопасные данные
-        const safeLogs = getSafeLogs();
+        // Получаем обработанные данные (с уже посчитанными минутами)
+        const safeLogs = getProcessedLogs();
         
         if (safeLogs.length === 0) {
-            statsGrid.innerHTML = '<div style="grid-column: span 2; text-align:center; color:#888;">Нет корректных данных для анализа</div>';
+            statsGrid.innerHTML = '<div style="grid-column: span 2; text-align:center; color:#888;">Нет данных для анализа</div>';
             return;
         }
         
