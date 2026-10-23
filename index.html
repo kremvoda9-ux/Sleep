@@ -66,8 +66,8 @@
     const historyList = document.getElementById('historyList');
 
     // Используем ключ _v2, чтобы данные из старой версии не смешивались, если решите вернуться назад
-    let logs = JSON.parse(localStorage.getItem('mySleepLogs_v2')) || [];
-    let savedStartTimestamp = localStorage.getItem('currentSleepStart_v2');
+    let logs = JSON.parse(localStorage.getItem('mySleepLogs')) || [];
+    let savedStartTimestamp = localStorage.getItem('currentSleepStart');
     let sleepStartTime = savedStartTimestamp ? new Date(parseInt(savedStartTimestamp)) : null;
 
     function init() {
