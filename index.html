@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Мой Сон | Полная Аналитика</title>
+    <title>Мой Сон | Аналитика v3</title>
     <style>
         body { font-family: sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 10px; }
         .container { width: 100%; max-width: 450px; }
@@ -12,7 +12,6 @@
         button { width: 100%; padding: 14px; margin: 8px 0; border: none; border-radius: 10px; font-size: 16px; cursor: pointer; transition: 0.2s; font-weight: 600; }
         button:active { transform: scale(0.98); }
         
-        /* Кнопки управления сном */
         .btn-sleep { background-color: #4CAF50; color: white; } 
         .btn-wake { background-color: #FF9800; color: white; }   
         .btn-dream-yes { background-color: #2196F3; color: white; } 
@@ -56,7 +55,6 @@
     <div class="stats-card">
         <div class="stats-title">Аналитика</div>
         
-        <!-- Переключатели периода -->
         <div class="period-switch">
             <button class="switch-btn active" onclick="setPeriod('all')">Все время</button>
             <button class="switch-btn" onclick="setPeriod('month')">Месяц</button>
@@ -86,81 +84,56 @@
     const statsGrid = document.getElementById('statsGrid');
     const historyList = document.getElementById('historyList');
 
-    // Глобальная переменная для выбранного периода
     let currentPeriod = 'all'; 
 
-    // --- МАГИЯ ВОССТАНОВЛЕНИЯ ДАННЫХ (START) ---
-    // Этот код запускается ОДИН РАЗ при открытии страницы.
-    // Он берет старые данные ('mySleepLogs') и копирует их в новые ('mySleepLogs_v2'), если там пусто.
-    
-    let oldData = JSON.parse(localStorage.getItem('mySleepLogs')) || [];
-    let newData = JSON.parse(localStorage.getItem('mySleepLogs_v2')) || [];
-
-    // Если есть старые данные, но нет новых — значит, надо мигрировать!
-    if (oldData.length > 0 && newData.length === 0) {
-        console.log("Переношу историю из старой версии...");
+    // --- ЗАЩИТА ОТ NaN И ПЕРЕНОС ДАННЫХ ---
+    function getSafeLogs() {
+        // Пробуем взять новые данные (_v2)
+        let data = JSON.parse(localStorage.getItem('mySleepLogs_v2')) || [];
         
-        // Пробегаемся по каждому старому элементу и добавляем недостающие технические поля
-        const migratedData = oldData.map(log => {
-            // Копируем базовые поля
-            let newItem = { ...log };
-            
-            // 1. Восстанавливаем timestamp (числовую метку времени)
-            // Парсим дату "24 окт" -> Date object -> getTime()
-            try {
-                const parts = log.date.split(' '); 
-                if (parts.length >= 2) {
-                    const day = parseInt(parts[0]);
-                    const monthNames = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
-                    const monthIndex = monthNames.findIndex(m => m.toLowerCase() === parts[1].toLowerCase());
-                    
-                    if (monthIndex !== -1) {
-                        const year = new Date().getFullYear();
-                        // Создаем дату на середину дня, чтобы точно попасть в нужный день
-                        const reconstructedDate = new Date(year, monthIndex, day, 12, 0, 0);
-                        newItem.timestamp = reconstructedDate.getTime();
-                    } else {
-                        newItem.timestamp = Date.now(); // Фолбэк, если парсер не понял дату
-                    }
-                } else {
-                     newItem.timestamp = Date.now();
-                }
-            } catch(e) {
-                 newItem.timestamp = Date.now();
+        // Если новых нет, берем старые ('mySleepLogs') и мигрируем их
+        if (data.length === 0) {
+            let oldData = JSON.parse(localStorage.getItem('mySleepLogs')) || [];
+            if (oldData.length > 0) {
+                console.log("Миграция старых данных...");
+                data = oldData.map(log => {
+                    // Восстанавливаем timestamp
+                    let ts = Date.now();
+                    try {
+                        const parts = log.date.split(' '); 
+                        if (parts.length >= 2) {
+                            const day = parseInt(parts[0]);
+                            const monthNames = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+                            const monthIndex = monthNames.findIndex(m => m.toLowerCase() === parts[1].toLowerCase());
+                            if (monthIndex !== -1) {
+                                ts = new Date(new Date().getFullYear(), monthIndex, day, 12).getTime();
+                            }
+                        }
+                    } catch(e) {}
+
+                    // Восстанавливаем duration
+                    let dur = 0;
+                    try {
+                        const [sh, sm] = log.sleepTime.split(':').map(Number);
+                        const [wh, wm] = log.wakeTime.split(':').map(Number);
+                        let startMins = sh * 60 + sm;
+                        let endMins = wh * 60 + wm;
+                        if (endMins <= startMins) endMins += 24 * 60;
+                        dur = endMins - startMins;
+                    } catch(e) {}
+
+                    return { ...log, timestamp: ts, duration: dur };
+                });
+                localStorage.setItem('mySleepLogs_v2', JSON.stringify(data));
             }
-
-            // 2. Считаем duration (длительность в минутах) из строк HH:MM
-            try {
-                const [sh, sm] = log.sleepTime.split(':').map(Number);
-                const [wh, wm] = log.wakeTime.split(':').map(Number);
-                
-                let startMins = sh * 60 + sm;
-                let endMins = wh * 60 + wm;
-                
-                // Переход через полночь (лег в 23:00, встал в 07:00)
-                if (endMins <= startMins) {
-                    endMins += 24 * 60;
-                }
-                
-                newItem.duration = endMins - startMins;
-            } catch(e) {
-                newItem.duration = 0;
-            }
-
-            return newItem;
-        });
-
-        // Сохраняем результат в НОВЫЙ ключ
-        localStorage.setItem('mySleepLogs_v2', JSON.stringify(migratedData));
-        alert(`✅ Успешно восстановлено ${migratedData.length} ночей из архива!`);
+        }
+        
+        // ФИЛЬТР БЕЗОПАСНОСТИ: Оставляем только те записи, где duration — это ЧИСЛО больше 0
+        return data.filter(item => typeof item.duration === 'number' && !isNaN(item.duration) && item.duration > 0);
     }
-    // --- МАГИЯ ВОССТАНОВЛЕНИЯ ДАННЫХ (END) ---
 
-
-    // Теперь работаем только с НОВЫМ ключом (_v2)
-    let logs = JSON.parse(localStorage.getItem('mySleepLogs_v2')) || [];
+    let logs = getSafeLogs();
     
-    // Проверяем активный сон (тоже берем из нового ключа)
     let savedStartTimestamp = localStorage.getItem('currentSleepStart_v2');
     let sleepStartTime = savedStartTimestamp ? new Date(parseInt(savedStartTimestamp)) : null;
 
@@ -170,30 +143,33 @@
         calculateAndShowStats();
     }
 
-    // Функция смены периода
     window.setPeriod = function(period) {
         currentPeriod = period;
-        // Обновляем стиль кнопок
         document.querySelectorAll('.switch-btn').forEach(btn => btn.classList.remove('active'));
         event.target.classList.add('active');
-        // Пересчитываем статистику
         calculateAndShowStats();
     };
 
     function calculateAndShowStats() {
-        if (logs.length === 0) return;
+        // Получаем уже очищенные безопасные данные
+        const safeLogs = getSafeLogs();
+        
+        if (safeLogs.length === 0) {
+            statsGrid.innerHTML = '<div style="grid-column: span 2; text-align:center; color:#888;">Нет корректных данных для анализа</div>';
+            return;
+        }
         
         let filteredLogs = [];
         const now = Date.now();
 
         if (currentPeriod === 'all') {
-            filteredLogs = logs;
+            filteredLogs = safeLogs;
         } else if (currentPeriod === 'month') {
             const oneMonthAgo = now - 30 * 24 * 60 * 60 * 1000;
-            filteredLogs = logs.filter(l => l.timestamp > oneMonthAgo);
+            filteredLogs = safeLogs.filter(l => l.timestamp > oneMonthAgo);
         } else if (currentPeriod === 'week') {
             const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
-            filteredLogs = logs.filter(l => l.timestamp > oneWeekAgo);
+            filteredLogs = safeLogs.filter(l => l.timestamp > oneWeekAgo);
         }
 
         if (filteredLogs.length === 0) {
@@ -323,15 +299,19 @@
 
     function updateHistoryUI() {
         historyList.innerHTML = '';
-        if (logs.length === 0) {
+        // Показываем все логи из памяти (даже если они были битыми, но теперь мы фильтруем только для статистики)
+        // Для отображения истории лучше брать сырые данные, чтобы пользователь видел всё
+        const allStoredLogs = JSON.parse(localStorage.getItem('mySleepLogs_v2')) || [];
+        
+        if (allStoredLogs.length === 0) {
             historyList.innerHTML = '<div style="text-align:center; color:#999; padding:10px;">Пока пусто</div>';
             return;
         }
         
-        const displayLogs = logs.slice(0, 10);
+        const displayLogs = allStoredLogs.slice(0, 10);
         
         displayLogs.forEach((log, index) => {
-            const realIndex = logs.indexOf(log); 
+            const realIndex = allStoredLogs.indexOf(log); 
             const dreamIcon = log.dream ? '🌙' : '😶';
             const itemDiv = document.createElement('div');
             itemDiv.className = 'log-item';
