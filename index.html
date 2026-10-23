@@ -89,17 +89,24 @@
     // Глобальная переменная для выбранного периода
     let currentPeriod = 'all'; 
 
-    // Читаем данные из СТАРОГО ключа 'mySleepLogs'
-    let rawLogs = JSON.parse(localStorage.getItem('mySleepLogs')) || [];
+    // --- МАГИЯ ВОССТАНОВЛЕНИЯ ДАННЫХ (START) ---
+    // Этот код запускается ОДИН РАЗ при открытии страницы.
+    // Он берет старые данные ('mySleepLogs') и копирует их в новые ('mySleepLogs_v2'), если там пусто.
     
-    // --- АВТОМАТИЧЕСКОЕ ИСПРАВЛЕНИЕ ДАННЫХ (START) ---
-    if (rawLogs.length > 0 && !rawLogs[0].hasOwnProperty('timestamp')) {
-        console.log("Обнаружены старые данные. Исправляю...");
-        
-        rawLogs = rawLogs.map(log => {
-            if (log.timestamp && log.duration !== undefined) return log;
+    let oldData = JSON.parse(localStorage.getItem('mySleepLogs')) || [];
+    let newData = JSON.parse(localStorage.getItem('mySleepLogs_v2')) || [];
 
-            let ts = Date.now(); 
+    // Если есть старые данные, но нет новых — значит, надо мигрировать!
+    if (oldData.length > 0 && newData.length === 0) {
+        console.log("Переношу историю из старой версии...");
+        
+        // Пробегаемся по каждому старому элементу и добавляем недостающие технические поля
+        const migratedData = oldData.map(log => {
+            // Копируем базовые поля
+            let newItem = { ...log };
+            
+            // 1. Восстанавливаем timestamp (числовую метку времени)
+            // Парсим дату "24 окт" -> Date object -> getTime()
             try {
                 const parts = log.date.split(' '); 
                 if (parts.length >= 2) {
@@ -109,13 +116,20 @@
                     
                     if (monthIndex !== -1) {
                         const year = new Date().getFullYear();
+                        // Создаем дату на середину дня, чтобы точно попасть в нужный день
                         const reconstructedDate = new Date(year, monthIndex, day, 12, 0, 0);
-                        ts = reconstructedDate.getTime();
+                        newItem.timestamp = reconstructedDate.getTime();
+                    } else {
+                        newItem.timestamp = Date.now(); // Фолбэк, если парсер не понял дату
                     }
+                } else {
+                     newItem.timestamp = Date.now();
                 }
-            } catch(e) {}
+            } catch(e) {
+                 newItem.timestamp = Date.now();
+            }
 
-            let durMin = 0;
+            // 2. Считаем duration (длительность в минутах) из строк HH:MM
             try {
                 const [sh, sm] = log.sleepTime.split(':').map(Number);
                 const [wh, wm] = log.wakeTime.split(':').map(Number);
@@ -123,23 +137,31 @@
                 let startMins = sh * 60 + sm;
                 let endMins = wh * 60 + wm;
                 
+                // Переход через полночь (лег в 23:00, встал в 07:00)
                 if (endMins <= startMins) {
                     endMins += 24 * 60;
                 }
                 
-                durMin = endMins - startMins;
-            } catch(e) {}
+                newItem.duration = endMins - startMins;
+            } catch(e) {
+                newItem.duration = 0;
+            }
 
-            return { ...log, timestamp: ts, duration: durMin };
+            return newItem;
         });
 
-        localStorage.setItem('mySleepLogs', JSON.stringify(rawLogs));
+        // Сохраняем результат в НОВЫЙ ключ
+        localStorage.setItem('mySleepLogs_v2', JSON.stringify(migratedData));
+        alert(`✅ Успешно восстановлено ${migratedData.length} ночей из архива!`);
     }
-    // --- АВТОМАТИЧЕСКОЕ ИСПРАВЛЕНИЕ ДАННЫХ (END) ---
+    // --- МАГИЯ ВОССТАНОВЛЕНИЯ ДАННЫХ (END) ---
 
-    let logs = rawLogs; 
+
+    // Теперь работаем только с НОВЫМ ключом (_v2)
+    let logs = JSON.parse(localStorage.getItem('mySleepLogs_v2')) || [];
     
-    let savedStartTimestamp = localStorage.getItem('currentSleepStart');
+    // Проверяем активный сон (тоже берем из нового ключа)
+    let savedStartTimestamp = localStorage.getItem('currentSleepStart_v2');
     let sleepStartTime = savedStartTimestamp ? new Date(parseInt(savedStartTimestamp)) : null;
 
     function init() {
@@ -227,7 +249,7 @@
             const btnSleep = createButton("😴 Лечь спать", "btn-sleep", () => {
                 const now = new Date();
                 sleepStartTime = now;
-                localStorage.setItem('currentSleepStart', now.getTime().toString());
+                localStorage.setItem('currentSleepStart_v2', now.getTime().toString());
                 renderControls();
             });
             controlsDiv.appendChild(btnSleep);
@@ -276,7 +298,7 @@
         
         saveLog(entry);
         sleepStartTime = null;
-        localStorage.removeItem('currentSleepStart');
+        localStorage.removeItem('currentSleepStart_v2');
         
         renderControls();
         updateHistoryUI();
@@ -287,13 +309,13 @@
     function saveLog(entry) {
         logs.unshift(entry); 
         if(logs.length > 100) logs.pop(); 
-        localStorage.setItem('mySleepLogs', JSON.stringify(logs));
+        localStorage.setItem('mySleepLogs_v2', JSON.stringify(logs));
     }
 
     function deleteLog(index) {
         if(confirm("Удалить эту запись?")) {
             logs.splice(index, 1);
-            localStorage.setItem('mySleepLogs', JSON.stringify(logs));
+            localStorage.setItem('mySleepLogs_v2', JSON.stringify(logs));
             updateHistoryUI();
             calculateAndShowStats();
         }
