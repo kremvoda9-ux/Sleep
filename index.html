@@ -65,8 +65,65 @@
     const statsGrid = document.getElementById('statsGrid');
     const historyList = document.getElementById('historyList');
 
-    // Используем ключ _v2, чтобы данные из старой версии не смешивались, если решите вернуться назад
-    let logs = JSON.parse(localStorage.getItem('mySleepLogs')) || [];
+    // Читаем данные из СТАРОГО ключа 'mySleepLogs', чтобы увидеть историю
+    let rawLogs = JSON.parse(localStorage.getItem('mySleepLogs')) || [];
+    
+    // --- АВТОМАТИЧЕСКОЕ ИСПРАВЛЕНИЕ ДАННЫХ (START) ---
+    // Этот кусок кода проходит по всем старым записям и добавляет недостающие поля timestamp и duration
+    if (rawLogs.length > 0 && !rawLogs[0].hasOwnProperty('timestamp')) {
+        console.log("Обнаружены старые данные. Исправляю...");
+        
+        rawLogs = rawLogs.map(log => {
+            // Если уже есть новые поля, пропускаем
+            if (log.timestamp && log.duration !== undefined) return log;
+
+            // 1. Восстанавливаем timestamp (грубо, но для фильтрации недель хватит)
+            // Парсим дату "24 окт" -> Date object
+            let ts = Date.now(); 
+            try {
+                const parts = log.date.split(' '); 
+                if (parts.length >= 2) {
+                    const day = parseInt(parts[0]);
+                    const monthNames = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+                    const monthIndex = monthNames.findIndex(m => m.toLowerCase() === parts[1].toLowerCase());
+                    
+                    if (monthIndex !== -1) {
+                        const year = new Date().getFullYear();
+                        const reconstructedDate = new Date(year, monthIndex, day, 12, 0, 0);
+                        ts = reconstructedDate.getTime();
+                    }
+                }
+            } catch(e) {}
+
+            // 2. Считаем duration (длительность в минутах) из строк HH:MM
+            let durMin = 0;
+            try {
+                const [sh, sm] = log.sleepTime.split(':').map(Number);
+                const [wh, wm] = log.wakeTime.split(':').map(Number);
+                
+                let startMins = sh * 60 + sm;
+                let endMins = wh * 60 + wm;
+                
+                // Переход через полночь
+                if (endMins <= startMins) {
+                    endMins += 24 * 60;
+                }
+                
+                durMin = endMins - startMins;
+            } catch(e) {}
+
+            return { ...log, timestamp: ts, duration: durMin };
+        });
+
+        // Сохраняем исправленные данные обратно в тот же ключ
+        localStorage.setItem('mySleepLogs', JSON.stringify(rawLogs));
+        alert("✅ Данные успешно восстановлены и готовы к анализу!");
+    }
+    // --- АВТОМАТИЧЕСКОЕ ИСПРАВЛЕНИЕ ДАННЫХ (END) ---
+
+    let logs = rawLogs; // Используем уже исправленный массив
+    
+    // Проверяем активный сон (тоже берем из старого ключа для совместимости, если нужно)
     let savedStartTimestamp = localStorage.getItem('currentSleepStart');
     let sleepStartTime = savedStartTimestamp ? new Date(parseInt(savedStartTimestamp)) : null;
 
@@ -78,6 +135,8 @@
 
     function calculateAndShowStats() {
         if (logs.length === 0) return;
+        
+        // Фильтруем только за последние 7 дней
         const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
         const recentLogs = logs.filter(l => l.timestamp > sevenDaysAgo);
 
@@ -134,7 +193,7 @@
             const btnSleep = createButton("😴 Лечь спать", "btn-sleep", () => {
                 const now = new Date();
                 sleepStartTime = now;
-                localStorage.setItem('currentSleepStart_v2', now.getTime().toString());
+                localStorage.setItem('currentSleepStart', now.getTime().toString());
                 renderControls();
             });
             controlsDiv.appendChild(btnSleep);
@@ -183,7 +242,7 @@
         
         saveLog(entry);
         sleepStartTime = null;
-        localStorage.removeItem('currentSleepStart_v2');
+        localStorage.removeItem('currentSleepStart');
         
         renderControls();
         updateHistoryUI();
@@ -194,13 +253,13 @@
     function saveLog(entry) {
         logs.unshift(entry); 
         if(logs.length > 100) logs.pop(); 
-        localStorage.setItem('mySleepLogs_v2', JSON.stringify(logs));
+        localStorage.setItem('mySleepLogs', JSON.stringify(logs));
     }
 
     function deleteLog(index) {
         if(confirm("Удалить эту запись?")) {
             logs.splice(index, 1);
-            localStorage.setItem('mySleepLogs_v2', JSON.stringify(logs));
+            localStorage.setItem('mySleepLogs', JSON.stringify(logs));
             updateHistoryUI();
             calculateAndShowStats();
         }
