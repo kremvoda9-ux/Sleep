@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мой Сон | Аналитика</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 10px; }
+        .container { width: 100%; max-width: 450px; }
+        
+        /* Карточка управления */
+        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); text-align: center; margin-bottom: 15px; }
+        h2 { color: #333; margin-top: 0; font-size: 1.4rem; }
+        button { width: 100%; padding: 14px; margin: 8px 0; border: none; border-radius: 10px; font-size: 16px; cursor: pointer; transition: 0.2s; font-weight: 600; }
+        button:active { transform: scale(0.98); }
+        
+        .btn-sleep { background-color: #4CAF50; color: white; } 
+        .btn-wake { background-color: #FF9800; color: white; }   
+        .btn-dream-yes { background-color: #2196F3; color: white; } 
+        .btn-dream-no { background-color: #757575; color: white; }  
+        
+        .status { margin-top: 10px; font-weight: bold; color: #666; min-height: 20px; font-size: 14px; }
+
+        /* Блок Статистики */
+        .stats-card { background: #1e1e1e; color: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .stats-title { font-size: 1.1rem; margin-bottom: 15px; color: #bbb; text-transform: uppercase; letter-spacing: 1px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .stat-box { background: #2c2c2c; padding: 15px; border-radius: 10px; text-align: center; }
+        .stat-value { display: block; font-size: 1.5rem; font-weight: bold; color: #fff; margin-bottom: 5px; }
+        .stat-label { font-size: 0.8rem; color: #aaa; }
+        
+        /* История */
+        .history-section { margin-top: 15px; text-align: left; }
+        .history-header { font-size: 0.9rem; color: #888; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .log-item { padding: 8px 0; border-bottom: 1px dashed #ddd; display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #555; }
+        .delete-btn { background: none; border: none; color: #ff5252; font-size: 16px; cursor: pointer; padding: 0 5px; width: auto; margin: 0; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    
+    <!-- Управление -->
+    <div class="card">
+        <h2 id="title">Трекер Сна</h2>
+        <div id="controls"></div>
+        <div class="status" id="statusText">Нажмите "Лечь спать", чтобы начать.</div>
+    </div>
+
+    <!-- Статистика -->
+    <div class="stats-card">
+        <div class="stats-title">Аналитика (последние 7 дней)</div>
+        <div class="grid" id="statsGrid">
+            <div class="stat-box"><span class="stat-value">--</span><span class="stat-label">Ср. сон</span></div>
+            <div class="stat-box"><span class="stat-value">--%</span><span class="stat-label">Со снами</span></div>
+            <div class="stat-box"><span class="stat-value">--</span><span class="stat-label">Ранний подъем</span></div>
+            <div class="stat-box"><span class="stat-value">--</span><span class="stat-label">Поздний отбой</span></div>
+        </div>
+    </div>
+
+    <!-- История -->
+    <div class="card history-section">
+        <div class="history-header">История записей</div>
+        <div id="historyList"></div>
+    </div>
+
+</div>
+
+<script>
+    const controlsDiv = document.getElementById('controls');
+    const statusText = document.getElementById('statusText');
+    const titleEl = document.getElementById('title');
+    const statsGrid = document.getElementById('statsGrid');
+    const historyList = document.getElementById('historyList');
+
+    // ВАЖНО: Используем другое имя ключа, чтобы не смешивать данные со старой версией
+    let logs = JSON.parse(localStorage.getItem('mySleepLogs_v2')) || [];
+    let savedStartTimestamp = localStorage.getItem('currentSleepStart_v2');
+    let sleepStartTime = savedStartTimestamp ? new Date(parseInt(savedStartTimestamp)) : null;
+
+    function init() {
+        renderControls();
+        updateHistoryUI();
+        calculateAndShowStats();
+    }
+
+    // --- ЛОГИКА СТАТИСТИКИ ---
+    function calculateAndShowStats() {
+        if (logs.length === 0) return;
+
+        // Фильтруем только за последние 7 дней
+        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const recentLogs = logs.filter(l => l.timestamp > sevenDaysAgo);
+
+        if (recentLogs.length === 0) {
+            statsGrid.innerHTML = '<div style="grid-column: span 2; text-align:center; color:#888;">Нет данных за неделю</div>';
+            return;
+        }
+
+        let totalDurationMin = 0;
+        let dreamsCount = 0;
+        let earliestWake = null; 
+        let latestSleep = null;  
+
+        recentLogs.forEach(log => {
+            totalDurationMin += log.duration;
+            if (log.dream) dreamsCount++;
+
+            // Парсим время подъема (HH:MM) в минуты
+            const [wH, wM] = log.wakeTime.split(':').map(Number);
+            const wakeMinutes = wH * 60 + wM;
+            
+            if (!earliestWake || wakeMinutes < earliestWake) {
+                earliestWake = wakeMinutes;
+            }
+
+            // Парсим время засыпания
+            const [sH, sM] = log.sleepTime.split(':').map(Number);
+            let sleepMinutes = sH * 60 + sM;
+            if (sH < 6 && sH >= 0) sleepMinutes += 24 * 60; 
+            
+            if (!latestSleep || sleepMinutes > latestSleep) {
+                latestSleep = sleepMinutes;
+            }
+        });
+
+        const avgHours = (totalDurationMin / recentLogs.length / 60).toFixed(1);
+        const dreamPercent = Math.round((dreamsCount / recentLogs.length) * 100);
+        
+        const formatMinToTime = (mins) => {
+            const m = mins % (24 * 60); 
+            const h = Math.floor(m / 60);
+            const mm = m % 60;
+            return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+        };
+
+        statsGrid.innerHTML = `
+            <div class="stat-box"><span class="stat-value">${avgHours} ч</span><span class="stat-label">Ср. сон</span></div>
+            <div class="stat-box"><span class="stat-value">${dreamPercent}%</span><span class="stat-label">Со снами</span></div>
+            <div class="stat-box"><span class="stat-value">${formatMinToTime(earliestWake)}</span><span class="stat-label">Ранний подъем</span></div>
+            <div class="stat-box"><span class="stat-value">${formatMinToTime(latestSleep)}</span><span class="stat-label">Поздний отбой</span></div>
+        `;
+    }
+
+    // --- ОСНОВНАЯ ЛОГИКА ПРИЛОЖЕНИЯ ---
+    function renderControls() {
+        controlsDiv.innerHTML = '';
+        statusText.innerText = "";
+        
+        if (!sleepStartTime) {
+            titleEl.innerText = "Готов ко сну?";
+            statusText.innerText = "Нажмите кнопку ниже, когда ляжете.";
+            
+            const btnSleep = createButton("😴 Лечь спать", "btn-sleep", () => {
+                const now = new Date();
+                sleepStartTime = now;
+                localStorage.setItem('currentSleepStart_v2', now.getTime().toString());
+                renderControls();
+            });
+            controlsDiv.appendChild(btnSleep);
+
+        } else {
+            titleEl.innerText = "Вы спите...";
+            statusText.innerText = `Засыпание: ${formatTime(sleepStartTime)}. Нажмите, когда проснетесь.`;
+            
+            const btnWake = createButton("☀️ Я проснулся!", "btn-wake", askDreamQuestion);
+            controlsDiv.appendChild(btnWake);
+        }
+    }
+
+    function createButton(text, className, onClick) {
+        const btn = document.createElement('button');
+        btn.className = className;
+        btn.innerText = text;
+        btn.onclick = onClick;
+        return btn;
+    }
+
+    function askDreamQuestion() {
+        controlsDiv.innerHTML = '';
+        statusText.innerText = "Важный вопрос:";
+        titleEl.innerText = "Снились ли сны?";
+
+        const yesBtn = createButton("Да, видел сны 🌙", "btn-dream-yes", () => finishSession(true));
+        const noBtn = createButton("Нет, без снов 😶", "btn-dream-no", () => finishSession(false));
+
+        controlsDiv.appendChild(yesBtn);
+        controlsDiv.appendChild(noBtn);
+    }
+
+    function finishSession(hadDream) {
+        const wakeTime = new Date();
+        const durationMin = Math.round((wakeTime - sleepStartTime) / 60000);
+        
+        const entry = {
+            timestamp: wakeTime.getTime(),
+            date: formatDate(wakeTime),
+            sleepTime: formatTime(sleepStartTime),
+            wakeTime: formatTime(wakeTime),
+            duration: durationMin,
+            dream: hadDream
+        };
+        
+        saveLog(entry);
+        sleepStartTime = null;
+        localStorage.removeItem('currentSleepStart_v2');
+        
+        renderControls();
+        updateHistoryUI();
+        calculateAndShowStats();
+        alert(`Запись сохранена!\nДлительность: ${durationMin} мин`);
+    }
+
+    function saveLog(entry) {
+        logs.unshift(entry); 
+        if(logs.length > 100) logs.pop(); 
+        localStorage.setItem('mySleepLogs_v2', JSON.stringify(logs));
+    }
+
+    function deleteLog(index) {
+        if(confirm("Удалить эту запись?")) {
+            logs.splice(index, 1);
+            localStorage.setItem('mySleepLogs_v2', JSON.stringify(logs));
+            updateHistoryUI();
+            calculateAndShowStats();
+        }
+    }
+
+    function updateHistoryUI() {
+        historyList.innerHTML = '';
+        if (logs.length === 0) {
+            historyList.innerHTML = '<div style="text-align:center; color:#999; padding:10px;">Пока пусто</div>';
+            return;
+        }
+        
+        const displayLogs = logs.slice(0, 10);
+        
+        displayLogs.forEach((log, index) => {
+            const realIndex = logs.indexOf(log); 
+            const dreamIcon = log.dream ? '🌙' : '😶';
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'log-item';
+            
+            const textSpan = document.createElement('span');
+            textSpan.innerText = `${dreamIcon} ${log.date}: ${log.sleepTime} → ${log.wakeTime}`;
+            
+            const delBtn = document.createElement('button');
+            delBtn.className = 'delete-btn';
+            delBtn.innerText = '❌';
+            delBtn.onclick = () => deleteLog(realIndex); 
+            
+            itemDiv.appendChild(textSpan);
+            itemDiv.appendChild(delBtn);
+            historyList.appendChild(itemDiv);
+        });
+    }
+
+    function formatTime(date) {
+        return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    }
+
+    function formatDate(date) {
+        return date.toLocaleDateString([], {day: 'numeric', month: 'short'});
+    }
+
+    window.deleteLogHandler = function(idx) { deleteLog(idx); };
+
+    init();
+</script>
+
+</body>
+</html>
