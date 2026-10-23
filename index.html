@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Мой Сон | Аналитика</title>
+    <title>Мой Сон | Полная Аналитика</title>
     <style>
         body { font-family: sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 10px; }
         .container { width: 100%; max-width: 450px; }
@@ -11,17 +11,30 @@
         h2 { color: #333; margin-top: 0; font-size: 1.4rem; }
         button { width: 100%; padding: 14px; margin: 8px 0; border: none; border-radius: 10px; font-size: 16px; cursor: pointer; transition: 0.2s; font-weight: 600; }
         button:active { transform: scale(0.98); }
+        
+        /* Кнопки управления сном */
         .btn-sleep { background-color: #4CAF50; color: white; } 
         .btn-wake { background-color: #FF9800; color: white; }   
         .btn-dream-yes { background-color: #2196F3; color: white; } 
         .btn-dream-no { background-color: #757575; color: white; }  
+        
         .status { margin-top: 10px; font-weight: bold; color: #666; min-height: 20px; font-size: 14px; }
+
+        /* Блок Статистики */
         .stats-card { background: #1e1e1e; color: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-        .stats-title { font-size: 1.1rem; margin-bottom: 15px; color: #bbb; text-transform: uppercase; letter-spacing: 1px; }
+        .stats-title { font-size: 1.1rem; margin-bottom: 10px; color: #bbb; text-transform: uppercase; letter-spacing: 1px; }
+        
+        /* Переключатели периода */
+        .period-switch { display: flex; gap: 5px; margin-bottom: 15px; }
+        .switch-btn { flex: 1; padding: 8px; font-size: 12px; background: #333; color: #aaa; border: none; border-radius: 5px; cursor: pointer; }
+        .switch-btn.active { background: #4CAF50; color: white; font-weight: bold; }
+
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .stat-box { background: #2c2c2c; padding: 15px; border-radius: 10px; text-align: center; }
         .stat-value { display: block; font-size: 1.5rem; font-weight: bold; color: #fff; margin-bottom: 5px; }
         .stat-label { font-size: 0.8rem; color: #aaa; }
+        
+        /* История */
         .history-section { margin-top: 15px; text-align: left; }
         .history-header { font-size: 0.9rem; color: #888; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
         .log-item { padding: 8px 0; border-bottom: 1px dashed #ddd; display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #555; }
@@ -41,7 +54,15 @@
 
     <!-- Статистика -->
     <div class="stats-card">
-        <div class="stats-title">Аналитика (последние 7 дней)</div>
+        <div class="stats-title">Аналитика</div>
+        
+        <!-- Переключатели периода -->
+        <div class="period-switch">
+            <button class="switch-btn active" onclick="setPeriod('all')">Все время</button>
+            <button class="switch-btn" onclick="setPeriod('month')">Месяц</button>
+            <button class="switch-btn" onclick="setPeriod('week')">Неделя</button>
+        </div>
+
         <div class="grid" id="statsGrid">
             <div class="stat-box"><span class="stat-value">--</span><span class="stat-label">Ср. сон</span></div>
             <div class="stat-box"><span class="stat-value">--%</span><span class="stat-label">Со снами</span></div>
@@ -65,20 +86,19 @@
     const statsGrid = document.getElementById('statsGrid');
     const historyList = document.getElementById('historyList');
 
-    // Читаем данные из СТАРОГО ключа 'mySleepLogs', чтобы увидеть историю
+    // Глобальная переменная для выбранного периода
+    let currentPeriod = 'all'; 
+
+    // Читаем данные из СТАРОГО ключа 'mySleepLogs'
     let rawLogs = JSON.parse(localStorage.getItem('mySleepLogs')) || [];
     
     // --- АВТОМАТИЧЕСКОЕ ИСПРАВЛЕНИЕ ДАННЫХ (START) ---
-    // Этот кусок кода проходит по всем старым записям и добавляет недостающие поля timestamp и duration
     if (rawLogs.length > 0 && !rawLogs[0].hasOwnProperty('timestamp')) {
         console.log("Обнаружены старые данные. Исправляю...");
         
         rawLogs = rawLogs.map(log => {
-            // Если уже есть новые поля, пропускаем
             if (log.timestamp && log.duration !== undefined) return log;
 
-            // 1. Восстанавливаем timestamp (грубо, но для фильтрации недель хватит)
-            // Парсим дату "24 окт" -> Date object
             let ts = Date.now(); 
             try {
                 const parts = log.date.split(' '); 
@@ -95,7 +115,6 @@
                 }
             } catch(e) {}
 
-            // 2. Считаем duration (длительность в минутах) из строк HH:MM
             let durMin = 0;
             try {
                 const [sh, sm] = log.sleepTime.split(':').map(Number);
@@ -104,7 +123,6 @@
                 let startMins = sh * 60 + sm;
                 let endMins = wh * 60 + wm;
                 
-                // Переход через полночь
                 if (endMins <= startMins) {
                     endMins += 24 * 60;
                 }
@@ -115,15 +133,12 @@
             return { ...log, timestamp: ts, duration: durMin };
         });
 
-        // Сохраняем исправленные данные обратно в тот же ключ
         localStorage.setItem('mySleepLogs', JSON.stringify(rawLogs));
-        alert("✅ Данные успешно восстановлены и готовы к анализу!");
     }
     // --- АВТОМАТИЧЕСКОЕ ИСПРАВЛЕНИЕ ДАННЫХ (END) ---
 
-    let logs = rawLogs; // Используем уже исправленный массив
+    let logs = rawLogs; 
     
-    // Проверяем активный сон (тоже берем из старого ключа для совместимости, если нужно)
     let savedStartTimestamp = localStorage.getItem('currentSleepStart');
     let sleepStartTime = savedStartTimestamp ? new Date(parseInt(savedStartTimestamp)) : null;
 
@@ -133,15 +148,34 @@
         calculateAndShowStats();
     }
 
+    // Функция смены периода
+    window.setPeriod = function(period) {
+        currentPeriod = period;
+        // Обновляем стиль кнопок
+        document.querySelectorAll('.switch-btn').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+        // Пересчитываем статистику
+        calculateAndShowStats();
+    };
+
     function calculateAndShowStats() {
         if (logs.length === 0) return;
         
-        // Фильтруем только за последние 7 дней
-        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-        const recentLogs = logs.filter(l => l.timestamp > sevenDaysAgo);
+        let filteredLogs = [];
+        const now = Date.now();
 
-        if (recentLogs.length === 0) {
-            statsGrid.innerHTML = '<div style="grid-column: span 2; text-align:center; color:#888;">Нет данных за неделю</div>';
+        if (currentPeriod === 'all') {
+            filteredLogs = logs;
+        } else if (currentPeriod === 'month') {
+            const oneMonthAgo = now - 30 * 24 * 60 * 60 * 1000;
+            filteredLogs = logs.filter(l => l.timestamp > oneMonthAgo);
+        } else if (currentPeriod === 'week') {
+            const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
+            filteredLogs = logs.filter(l => l.timestamp > oneWeekAgo);
+        }
+
+        if (filteredLogs.length === 0) {
+            statsGrid.innerHTML = '<div style="grid-column: span 2; text-align:center; color:#888;">Нет данных за выбранный период</div>';
             return;
         }
 
@@ -150,7 +184,7 @@
         let earliestWake = null; 
         let latestSleep = null;  
 
-        recentLogs.forEach(log => {
+        filteredLogs.forEach(log => {
             totalDurationMin += log.duration;
             if (log.dream) dreamsCount++;
 
@@ -164,8 +198,8 @@
             if (!latestSleep || sleepMinutes > latestSleep) latestSleep = sleepMinutes;
         });
 
-        const avgHours = (totalDurationMin / recentLogs.length / 60).toFixed(1);
-        const dreamPercent = Math.round((dreamsCount / recentLogs.length) * 100);
+        const avgHours = (totalDurationMin / filteredLogs.length / 60).toFixed(1);
+        const dreamPercent = Math.round((dreamsCount / filteredLogs.length) * 100);
         
         const formatMinToTime = (mins) => {
             const m = mins % (24 * 60); 
