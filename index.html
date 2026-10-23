@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Мой Сон | Аналитика v4 (Final Fix)</title>
+    <title>Мой Сон | Живой Дневник</title>
     <style>
         body { font-family: sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 10px; }
         .container { width: 100%; max-width: 450px; }
@@ -17,23 +17,38 @@
         .btn-dream-yes { background-color: #2196F3; color: white; } 
         .btn-dream-no { background-color: #757575; color: white; }  
         
+        /* Стиль для кнопок дневника */
+        .btn-add-dream { background-color: #9C27B0; color: white; margin-top: 10px; }
+        .btn-edit-dream { background-color: #FF9800; color: white; font-size: 12px; padding: 5px 10px; width: auto; margin-left: 5px; }
+        .btn-save-dream { background-color: #4CAF50; color: white; font-size: 12px; padding: 5px 10px; width: auto; margin-right: 5px; }
+        .btn-cancel-dream { background-color: #757575; color: white; font-size: 12px; padding: 5px 10px; width: auto; }
+        .btn-del-dream { background-color: #ef5350; color: white; font-size: 12px; padding: 5px 10px; width: auto; margin-top: 5px;}
+
         .status { margin-top: 10px; font-weight: bold; color: #666; min-height: 20px; font-size: 14px; }
 
         /* Блок Статистики */
-        .stats-card { background: #1e1e1e; color: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .stats-card { background: #1e1e1e; color: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); margin-bottom: 15px; }
         .stats-title { font-size: 1.1rem; margin-bottom: 10px; color: #bbb; text-transform: uppercase; letter-spacing: 1px; }
-        
-        /* Переключатели периода */
-        .period-switch { display: flex; gap: 5px; margin-bottom: 15px; }
-        .switch-btn { flex: 1; padding: 8px; font-size: 12px; background: #333; color: #aaa; border: none; border-radius: 5px; cursor: pointer; }
-        .switch-btn.active { background: #4CAF50; color: white; font-weight: bold; }
-
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .stat-box { background: #2c2c2c; padding: 15px; border-radius: 10px; text-align: center; }
         .stat-value { display: block; font-size: 1.5rem; font-weight: bold; color: #fff; margin-bottom: 5px; }
         .stat-label { font-size: 0.8rem; color: #aaa; }
+
+        /* Секция Дневника Снов */
+        .dreams-section { background: linear-gradient(135deg, #E3F2FD 0%, #FFFFFF 100%); padding: 20px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 15px; text-align: left; }
+        .dreams-header { font-size: 1.2rem; font-weight: bold; color: #1565C0; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
+        .dream-count-badge { background: #1565C0; color: white; padding: 5px 10px; border-radius: 20px; font-size: 0.9rem; }
         
-        /* История */
+        textarea { width: 100%; height: 100px; padding: 10px; border: 1px solid #BBDEFB; border-radius: 8px; resize: vertical; font-family: inherit; font-size: 14px; box-sizing: border-box; margin-bottom: 10px; background: white; }
+        
+        .saved-notes-list { margin-top: 15px; max-height: 300px; overflow-y: auto; border-top: 1px dashed #90CAF9; padding-top: 10px; }
+        .note-item { background: white; padding: 15px; border-radius: 10px; margin-bottom: 10px; font-size: 14px; color: #333; box-shadow: 0 2px 5px rgba(0,0,0,0.05); position: relative; transition: all 0.2s; }
+        .note-item:hover { box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .note-date { font-weight: bold; color: #1565C0; display: block; margin-bottom: 5px; font-size: 0.9rem; }
+        .note-text { line-height: 1.4; word-wrap: break-word; }
+        .actions-row { margin-top: 10px; display: flex; gap: 5px; flex-wrap: wrap; }
+
+        /* История основного трека */
         .history-section { margin-top: 15px; text-align: left; }
         .history-header { font-size: 0.9rem; color: #888; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
         .log-item { padding: 8px 0; border-bottom: 1px dashed #ddd; display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #555; }
@@ -53,14 +68,7 @@
 
     <!-- Статистика -->
     <div class="stats-card">
-        <div class="stats-title">Аналитика</div>
-        
-        <div class="period-switch">
-            <button class="switch-btn active" onclick="setPeriod('all')">Все время</button>
-            <button class="switch-btn" onclick="setPeriod('month')">Месяц</button>
-            <button class="switch-btn" onclick="setPeriod('week')">Неделя</button>
-        </div>
-
+        <div class="stats-title">Аналитика (За всё время)</div>
         <div class="grid" id="statsGrid">
             <div class="stat-box"><span class="stat-value">--</span><span class="stat-label">Ср. сон</span></div>
             <div class="stat-box"><span class="stat-value">--%</span><span class="stat-label">Со снами</span></div>
@@ -69,9 +77,32 @@
         </div>
     </div>
 
-    <!-- История -->
+    <!-- НОВЫЙ БЛОК: РЕДАКТИРУЕМЫЙ ДНЕВНИК СНОВ -->
+    <div class="dreams-section">
+        <div class="dreams-header">
+            <span>🌙 Мои Сны</span>
+            <span class="dream-count-badge" id="dreamCounter">0 снов</span>
+        </div>
+        
+        <button class="btn-add-dream" onclick="showNewDreamForm()">➕ Записать новый сон</button>
+        
+        <!-- Форма добавления/редактирования (скрыта по умолчанию) -->
+        <div id="dreamFormContainer" style="display:none; margin-top:15px;">
+            <textarea id="dreamInput" placeholder="Опишите свой сон... Что видели? Какие эмоции?"></textarea>
+            <div style="display:flex; gap:10px;">
+                <button class="btn-save-dream" onclick="saveCurrentDream()" style="flex:1;">💾 Сохранить</button>
+                <button class="btn-cancel-dream" onclick="hideDreamForm()" style="flex:1;">Отмена</button>
+            </div>
+        </div>
+
+        <div class="saved-notes-list" id="notesList">
+            <!-- Сюда будут попадать сохраненные заметки -->
+        </div>
+    </div>
+
+    <!-- История записей (основная) -->
     <div class="card history-section">
-        <div class="history-header">История записей</div>
+        <div class="history-header">История сессий</div>
         <div id="historyList"></div>
     </div>
 
@@ -83,24 +114,22 @@
     const titleEl = document.getElementById('title');
     const statsGrid = document.getElementById('statsGrid');
     const historyList = document.getElementById('historyList');
+    const dreamInput = document.getElementById('dreamInput');
+    const notesList = document.getElementById('notesList');
+    const dreamCounter = document.getElementById('dreamCounter');
+    const dreamFormContainer = document.getElementById('dreamFormContainer');
 
-    let currentPeriod = 'all'; 
-
-    // --- ФУНКЦИЯ ПОЛУЧЕНИЯ ДАННЫХ С АВТОРАСЧЕТОМ ---
+    // --- ЛОГИКА ДАННЫХ ---
+    
     function getProcessedLogs() {
-        // Берем сырые данные
         let rawLogs = JSON.parse(localStorage.getItem('mySleepLogs_v2')) || [];
-        
-        // Если пусто, пробуем старые
         if (rawLogs.length === 0) {
              rawLogs = JSON.parse(localStorage.getItem('mySleepLogs')) || [];
         }
 
-        // Обрабатываем каждую запись
         return rawLogs.map(log => {
             let processedLog = { ...log };
 
-            // 1. Гарантируем наличие timestamp
             if (!processedLog.timestamp) {
                 try {
                     const parts = log.date.split(' '); 
@@ -119,32 +148,27 @@
                 } catch(e) { processedLog.timestamp = Date.now(); }
             }
 
-            // 2. ГАВНЫЙ МОМЕНТ: Если duration нет или оно 0/NaN, считаем его сами из строк времени!
             if (!processedLog.duration || isNaN(processedLog.duration) || processedLog.duration <= 0) {
                 try {
                     const [sh, sm] = log.sleepTime.split(':').map(Number);
                     const [wh, wm] = log.wakeTime.split(':').map(Number);
-                    
                     let startMins = sh * 60 + sm;
                     let endMins = wh * 60 + wm;
-                    
-                    // Переход через полночь
-                    if (endMins <= startMins) {
-                        endMins += 24 * 60;
-                    }
-                    
+                    if (endMins <= startMins) endMins += 24 * 60;
                     processedLog.duration = endMins - startMins;
-                } catch(e) {
-                    processedLog.duration = 0; // Если совсем беда, ставим 0
-                }
+                } catch(e) { processedLog.duration = 0; }
             }
 
             return processedLog;
-        }).filter(log => log.duration > 0); // В конце отсекаем те, что реально не спали (0 мин)
+        }).filter(log => log.duration > 0);
     }
 
     let logs = getProcessedLogs();
     
+    // Загрузка заметок о снах
+    let dreamNotes = JSON.parse(localStorage.getItem('myDreamNotes')) || [];
+    let editingId = null; // ID записи, которую сейчас редактируем
+
     let savedStartTimestamp = localStorage.getItem('currentSleepStart_v2');
     let sleepStartTime = savedStartTimestamp ? new Date(parseInt(savedStartTimestamp)) : null;
 
@@ -152,48 +176,24 @@
         renderControls();
         updateHistoryUI();
         calculateAndShowStats();
+        renderDreamNotes();
     }
 
-    window.setPeriod = function(period) {
-        currentPeriod = period;
-        document.querySelectorAll('.switch-btn').forEach(btn => btn.classList.remove('active'));
-        event.target.classList.add('active');
-        calculateAndShowStats();
-    };
-
+    // --- СТАТИСТИКА ---
     function calculateAndShowStats() {
-        // Получаем обработанные данные (с уже посчитанными минутами)
         const safeLogs = getProcessedLogs();
         
         if (safeLogs.length === 0) {
-            statsGrid.innerHTML = '<div style="grid-column: span 2; text-align:center; color:#888;">Нет данных для анализа</div>';
+            statsGrid.innerHTML = '<div style="grid-column: span 2; text-align:center; color:#888;">Нет данных</div>';
             return;
         }
         
-        let filteredLogs = [];
-        const now = Date.now();
-
-        if (currentPeriod === 'all') {
-            filteredLogs = safeLogs;
-        } else if (currentPeriod === 'month') {
-            const oneMonthAgo = now - 30 * 24 * 60 * 60 * 1000;
-            filteredLogs = safeLogs.filter(l => l.timestamp > oneMonthAgo);
-        } else if (currentPeriod === 'week') {
-            const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
-            filteredLogs = safeLogs.filter(l => l.timestamp > oneWeekAgo);
-        }
-
-        if (filteredLogs.length === 0) {
-            statsGrid.innerHTML = '<div style="grid-column: span 2; text-align:center; color:#888;">Нет данных за выбранный период</div>';
-            return;
-        }
-
         let totalDurationMin = 0;
         let dreamsCount = 0;
         let earliestWake = null; 
         let latestSleep = null;  
 
-        filteredLogs.forEach(log => {
+        safeLogs.forEach(log => {
             totalDurationMin += log.duration;
             if (log.dream) dreamsCount++;
 
@@ -207,8 +207,8 @@
             if (!latestSleep || sleepMinutes > latestSleep) latestSleep = sleepMinutes;
         });
 
-        const avgHours = (totalDurationMin / filteredLogs.length / 60).toFixed(1);
-        const dreamPercent = Math.round((dreamsCount / filteredLogs.length) * 100);
+        const avgHours = (totalDurationMin / safeLogs.length / 60).toFixed(1);
+        const dreamPercent = Math.round((dreamsCount / safeLogs.length) * 100);
         
         const formatMinToTime = (mins) => {
             const m = mins % (24 * 60); 
@@ -225,6 +225,7 @@
         `;
     }
 
+    // --- УПРАВЛЕНИЕ СНОМ ---
     function renderControls() {
         controlsDiv.innerHTML = '';
         statusText.innerText = "";
@@ -310,8 +311,6 @@
 
     function updateHistoryUI() {
         historyList.innerHTML = '';
-        // Показываем все логи из памяти (даже если они были битыми, но теперь мы фильтруем только для статистики)
-        // Для отображения истории лучше брать сырые данные, чтобы пользователь видел всё
         const allStoredLogs = JSON.parse(localStorage.getItem('mySleepLogs_v2')) || [];
         
         if (allStoredLogs.length === 0) {
@@ -340,6 +339,126 @@
             historyList.appendChild(itemDiv);
         });
     }
+
+    // --- НОВЫЙ БЛОК: РЕДАКТИРУЕМЫЙ ДНЕВНИК СНОВ ---
+    
+    window.showNewDreamForm = function() {
+        editingId = null; // Режим создания новой записи
+        dreamInput.value = '';
+        dreamInput.placeholder = "Опишите свой сон... Что видели? Какие эмоции?";
+        dreamFormContainer.style.display = 'block';
+        dreamInput.focus();
+    };
+
+    window.hideDreamForm = function() {
+        dreamFormContainer.style.display = 'none';
+        editingId = null;
+    };
+
+    window.editDreamNote = function(id) {
+        const note = dreamNotes.find(n => n.id === id);
+        if (note) {
+            editingId = id;
+            dreamInput.value = note.text;
+            dreamInput.placeholder = "Редактирование сна от " + note.date;
+            dreamFormContainer.style.display = 'block';
+            dreamInput.focus();
+        }
+    };
+
+    window.saveCurrentDream = function() {
+        const text = dreamInput.value.trim();
+        if (!text) {
+            alert("Напишите что-нибудь!");
+            return;
+        }
+
+        if (editingId) {
+            // Режим редактирования
+            const index = dreamNotes.findIndex(n => n.id === editingId);
+            if (index !== -1) {
+                dreamNotes[index].text = text;
+                dreamNotes[index].editedAt = Date.now(); // Метка времени изменения
+            }
+        } else {
+            // Режим создания
+            const noteEntry = {
+                id: Date.now(),
+                date: new Date().toLocaleDateString([], {day: 'numeric', month: 'short', year: 'numeric'}),
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                text: text,
+                createdAt: Date.now()
+            };
+            dreamNotes.unshift(noteEntry);
+        }
+
+        localStorage.setItem('myDreamNotes', JSON.stringify(dreamNotes));
+        hideDreamForm();
+        renderDreamNotes();
+        alert(editingId ? "Сон обновлен! ✨" : "Сон записан! ✨");
+    };
+
+    function renderDreamNotes() {
+        // Обновляем счетчик
+        dreamCounter.innerText = `${dreamNotes.length} снов`;
+
+        notesList.innerHTML = '';
+        
+        if (dreamNotes.length === 0) {
+            notesList.innerHTML = '<div style="text-align:center; color:#999; font-style:italic;">Еще нет записанных снов...</div>';
+            return;
+        }
+
+        // Показываем все заметки (или можно ограничить количеством)
+        dreamNotes.forEach(note => {
+            const div = document.createElement('div');
+            div.className = 'note-item';
+            
+            const dateSpan = document.createElement('span');
+            dateSpan.className = 'note-date';
+            // Если редактировали, показываем дату создания и дату изменения
+            let dateStr = `${note.date} • ${note.time}`;
+            if (note.editedAt) {
+                const editDate = new Date(note.editedAt).toLocaleDateString([], {day: 'numeric', month: 'short'});
+                dateStr += ` (изм. ${editDate})`;
+            }
+            dateSpan.innerText = dateStr;
+            
+            const textP = document.createElement('p');
+            textP.className = 'note-text';
+            textP.innerText = note.text;
+
+            const actionsRow = document.createElement('div');
+            actionsRow.className = 'actions-row';
+
+            const editBtn = document.createElement('button');
+            editBtn.className = 'btn-edit-dream';
+            editBtn.innerText = '✏️ Изменить';
+            editBtn.onclick = () => editDreamNote(note.id);
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'btn-del-dream';
+            delBtn.innerText = '🗑️ Удалить';
+            delBtn.onclick = () => deleteDreamNote(note.id);
+
+            actionsRow.appendChild(editBtn);
+            actionsRow.appendChild(delBtn);
+
+            div.appendChild(dateSpan);
+            div.appendChild(textP);
+            div.appendChild(actionsRow);
+            
+            notesList.appendChild(div);
+        });
+    }
+
+    window.deleteDreamNote = function(id) {
+        if(confirm("Удалить этот сон из дневника?")) {
+            dreamNotes = dreamNotes.filter(n => n.id !== id);
+            localStorage.setItem('myDreamNotes', JSON.stringify(dreamNotes));
+            renderDreamNotes();
+        }
+    };
 
     function formatTime(date) {
         return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
